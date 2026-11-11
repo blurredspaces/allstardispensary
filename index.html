@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AllStar Dispensary</title>
+<meta name="description" content="AllStar Dispensary">
+<style>
+  :root {
+    --black: #000000;
+    --smoke: 236, 233, 226;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--black);
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+  }
+
+  /* Faint pool of light under the logo so the black has depth */
+  .glow {
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(48% 34% at 50% 60%, rgba(var(--smoke), .055), transparent 70%),
+      radial-gradient(30% 20% at 50% 64%, rgba(var(--smoke), .04), transparent 75%);
+    pointer-events: none;
+  }
+
+  #smoke {
+    position: fixed; inset: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .logo-wrap {
+    position: relative;
+    z-index: 1;
+    width: min(80vw, 860px);
+    margin-top: 14vh;
+  }
+  .logo {
+    display: block;
+    width: 100%;
+    height: auto;
+    opacity: 0;
+    transform: translateY(12px) scale(.985);
+    transition:
+      opacity 1.6s cubic-bezier(.22, 1, .36, 1),
+      transform 2.2s cubic-bezier(.22, 1, .36, 1);
+  }
+  .logo.is-in { opacity: 1; transform: none; }
+
+  /* Grain */
+  .grain {
+    position: fixed; inset: -50%;
+    z-index: 3;
+    pointer-events: none;
+    opacity: .07;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .logo { transition: opacity .6s linear; transform: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="glow" aria-hidden="true"></div>
+  <canvas id="smoke" aria-hidden="true"></canvas>
+
+  <h1 class="logo-wrap">
+    <img class="logo" id="logo" src="Graphics/allstar-logo.png" width="2000" height="855" alt="AllStar Dispensary">
+  </h1>
+
+  <div class="grain" aria-hidden="true"></div>
+
+<script>
+(() => {
+  const logo = document.getElementById('logo');
+  const canvas = document.getElementById('smoke');
+  const ctx = canvas.getContext('2d');
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // The source logo is black + grey on transparent. Recolor the black to
+  // off-white for the black background, and lift the grey a touch.
+  function recolorLogo(img) {
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const x = c.getContext('2d');
+    x.drawImage(img, 0, 0);
+    const d = x.getImageData(0, 0, c.width, c.height);
+    const p = d.data;
+    for (let i = 0; i < p.length; i += 4) {
+      if (!p[i + 3]) continue;
+      const lum = (p[i] + p[i + 1] + p[i + 2]) / 3;
+      if (lum < 90) { p[i] = 242; p[i + 1] = 240; p[i + 2] = 235; }        // wordmark + smoke S
+      else if (lum < 220) { p[i] = 150; p[i + 1] = 150; p[i + 2] = 150; } // DISPENSARY
+    }
+    x.putImageData(d, 0, 0);
+    return c.toDataURL('image/png');
+  }
+
+  function reveal() {
+    try { logo.src = recolorLogo(logo); }
+    catch (e) { logo.style.filter = 'invert(1)'; }
+    requestAnimationFrame(() => requestAnimationFrame(() => logo.classList.add('is-in')));
+  }
+  if (logo.complete && logo.naturalWidth) reveal(); else logo.addEventListener('load', reveal, { once: true });
+
+  // ---------- Smoke ----------
+  let W = 0, H = 0, DPR = 1, rect;
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = innerWidth; H = innerHeight;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    rect = logo.getBoundingClientRect();
+  }
+  addEventListener('resize', resize);
+  resize();
+
+  // Soft, wispy puff sprite built from layered blurred blobs
+  function makeSprite(seed) {
+    const s = 256, c = document.createElement('canvas');
+    c.width = c.height = s;
+    const g = c.getContext('2d');
+    let r = seed;
+    const rand = () => (r = (r * 16807) % 2147483647) / 2147483647;
+    for (let i = 0; i < 26; i++) {
+      const a = rand() * Math.PI * 2, dist = rand() * s * .2;
+      const cx = s / 2 + Math.cos(a) * dist, cy = s / 2 + Math.sin(a) * dist;
+      const rad = s * (.12 + rand() * .26);
+      const grd = g.createRadialGradient(cx, cy, 0, cx, cy, rad);
+      grd.addColorStop(0, `rgba(255,255,255,${.10 + rand() * .10})`);
+      grd.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = grd;
+      g.fillRect(0, 0, s, s);
+    }
+    return c;
+  }
+  const sprites = [1, 7, 42, 99, 1234].map(makeSprite);
+
+  // Emission points in logo image coordinates (2000 x 855), with weights.
+  // The smoke S tip and curls carry most of it; the letter tops breathe a little.
+  const emitters = [
+    { x: 1135, y: 85,  w: 9, spread: 22 },  // top wisp of the S
+    { x: 1050, y: 145, w: 4, spread: 30 },  // upper curl of the S
+    { x: 1150, y: 165, w: 3, spread: 26 },
+    { x: 1443, y: 220, w: 1.5, spread: 18 }, // star tip
+    { x: 250,  y: 215, w: 1, spread: 90 },  // A
+    { x: 560,  y: 215, w: 1, spread: 120 }, // LL
+    { x: 1230, y: 220, w: 1, spread: 70 },  // T
+    { x: 1720, y: 220, w: 1, spread: 110 }, // R
+  ];
+  const totalW = emitters.reduce((a, e) => a + e.w, 0);
+  function pickEmitter() {
+    let n = Math.random() * totalW;
+    for (const e of emitters) { if ((n -= e.w) <= 0) return e; }
+    return emitters[0];
+  }
+
+  const parts = [];
+  const MAX = W < 700 ? 160 : 320;
+
+  function spawn() {
+    if (!rect || !rect.width) return;
+    const e = pickEmitter();
+    const scale = rect.width / 2000;
+    const x = rect.left + (e.x + (Math.random() - .5) * e.spread * 2) * scale;
+    // Start just inside the shape so the smoke rises out from behind it
+    const y = rect.top + (e.y + 18 + Math.random() * 20) * scale;
+    const base = rect.width / 860; // keep size proportional to the logo
+    parts.push({
+      x, y,
+      vx: (Math.random() - .5) * .2,
+      vy: -(.45 + Math.random() * .5) * base,
+      size: (5 + Math.random() * 8) * base,
+      grow: (.06 + Math.random() * .1) * base,
+      stretch: 1.6 + Math.random() * 1.4, // tall, thin puffs read as wisps
+      rot: (Math.random() - .5) * .5,
+      vr: (Math.random() - .5) * .004,
+      life: 0,
+      maxLife: 260 + Math.random() * 240,
+      peak: e.w > 2 ? .10 + Math.random() * .06 : .05 + Math.random() * .04,
+      sprite: sprites[(Math.random() * sprites.length) | 0],
+      phase: Math.random() * 1000,
+    });
+  }
+
+  let t = 0, last = performance.now(), acc = 0;
+  function frame(now) {
+    const dt = Math.min((now - last) / 16.67, 3);
+    last = now; t += dt;
+
+    rect = logo.getBoundingClientRect();
+    acc += dt * (W < 700 ? .8 : 1.4);
+    while (acc >= 1) { acc -= 1; if (parts.length < MAX) spawn(); }
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'screen';
+
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const p = parts[i];
+      p.life += dt;
+      const k = p.life / p.maxLife;
+      if (k >= 1) { parts.splice(i, 1); continue; }
+
+      // Gentle curling drift: layered sines stand in for turbulence
+      // Curl grows with age so columns start tight and unravel as they rise
+      const sway = (Math.sin((p.y * .014) + t * .01 + p.phase) * .55
+                 + Math.sin((p.y * .037) + p.phase * 1.7) * .22) * (.3 + k * 1.4);
+      p.vx += (sway - p.vx) * .04 * dt;
+      p.rot = p.vx * .5;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy *= Math.pow(.9985, dt);
+      p.size += p.grow * dt;
+      p.rot += p.vr * dt;
+
+      // Fade in quickly, linger, fade out slowly
+      const a = k < .03 ? k / .03 : Math.pow(1 - (k - .03) / .97, 2);
+      ctx.globalAlpha = a * p.peak;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      const sw = p.size, sh = p.size * p.stretch;
+      ctx.drawImage(p.sprite, -sw, -sh, sw * 2, sh * 2);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    requestAnimationFrame(frame);
+  }
+
+  if (!reduceMotion) {
+    // Let the logo settle before the smoke starts
+    setTimeout(() => { last = performance.now(); requestAnimationFrame(frame); }, 500);
+  }
+})();
+</script>
+</body>
+</html>
